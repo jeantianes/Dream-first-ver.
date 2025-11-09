@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-white">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome Dino Game Demo</title>
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Use a font similar to the Chrome error page */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow: hidden; /* Hide scrollbars from all the windows */
+        }
+        /* Canvas should not be selectable */
+        canvas {
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            touch-action: manipulation; /* Disable double-tap to zoom */
+        }
+        
+        /* Loader Animations */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        @keyframes file-move {
+            from { transform: translateX(0); }
+            to { transform: translateX(48px); }
+        }
+        @keyframes draw-route {
+            to { stroke-dashoffset: 0; }
+        }
+        .loader-dots > div {
+            animation: pulse 1.4s infinite ease-in-out;
+        }
+        .loader-dots > div:nth-child(1) { animation-delay: -0.32s; }
+        .loader-dots > div:nth-child(2) { animation-delay: -0.16s; }
+
+        /* Style for the pop-up windows */
+        .loader-window {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease-out;
+            /* Give a slight 3D tilt effect */
+            transform: perspective(1000px) rotateX(-2deg) rotateY(2deg);
+        }
+        .loader-window:hover {
+            transform: perspective(1000px) scale(1.02);
+            z-index: 50;
+        }
+        .loader-window-titlebar {
+            cursor: grab;
+        }
+        
+        /* Text scroll animation */
+        .text-scroll-box {
+            height: 80px;
+            overflow: hidden;
+            background: #222;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 10px;
+            color: #0f0;
+        }
+        .text-scroll-box > div {
+            animation: pulse 1s infinite;
+        }
+    </style>
+</head>
+<body class="h-full bg-gray-200 text-gray-700 flex items-center justify-center p-4">
+
+    <!-- Premium Upgrade Modal -->
+    <div id="premiumModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full transform transition-all scale-100">
+            <h2 class="text-2xl font-bold text-center text-blue-600 mb-4">Upgrade to Premium!</h2>
+            <p class="text-gray-600 text-center mb-6">Skip the line and get 3x shorter wait times, plus detailed progress indicators!</p>
+            <div class="text-center mb-6">
+                <span class="text-4xl font-bold text-gray-800">£239.99</span>
+                <span class="text-gray-500">/ week</span>
+            </div>
+            <div class="flex flex-col space-y-3">
+                <button id="upgradeButton" class="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-lg hover:bg-blue-700 transition duration-200">
+                    Upgrade Now & Wait 5 Mins
+                </button>
+                <button id="closeModalButton" class="w-full bg-gray-200 text-gray-700 font-semibold py-2 px-6 rounded-lg hover:bg-gray-300 transition duration-200">
+                    No Thanks, I'll Wait 15 Mins
+                </button>
+            </div>
+            <p class="text-xs text-gray-400 text-center mt-4">This is a simulation. No real payment will be processed.</p>
+        </div>
+    </div>
+    
+    <!-- NEW: Simulated Payment Modal -->
+    <div id="paymentModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full">
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-2">Complete Your Payment</h2>
+            <p class="text-center text-gray-500 mb-6">You are authorizing a recurring payment of <span class="font-bold text-gray-700">£239.99/week</span>.</p>
+            
+            <div class="bg-gray-100 border border-gray-300 rounded-lg p-4 space-y-4">
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Pay with:</span>
+                    <!-- Simulated Revolut Logo -->
+                    <span class="font-bold text-lg flex items-center">
+                        <svg class="w-6 h-6 mr-1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24Z" fill="#0075FF"></path><path d="M11.6491 16.4852V16.4862H11.6521L14.7351 11.2332C15.0601 10.7962 15.3341 10.3982 15.5481 10.0452C15.7631 9.6912 15.8701 9.3872 15.8701 9.1252C15.8701 8.7182 15.7291 8.3982 15.4471 8.1652C15.1661 7.9322 14.7921 7.8162 14.3231 7.8162C13.8201 7.8162 13.3761 7.9342 13.0011 8.1712C12.6261 8.4072 12.3521 8.7152 12.1851 9.0882L11.0281 7.1582C11.3811 6.8182 11.8341 6.5512 12.3781 6.3662C12.9221 6.1812 13.5651 6.0882 14.3001 6.0882C15.9381 6.0882 17.1651 6.5642 17.9621 7.5012C18.7601 8.4382 19.1651 9.7122 19.1651 11.3092V11.4582C19.1651 12.1522 19.0641 12.8022 18.8631 13.4002C18.6621 13.9982 18.3301 14.6542 17.8721 15.3562L13.8961 21.0822H20.0001V22.6182H9.0001V22.4262L12.9921 16.6362L11.6491 16.4852Z" fill="white"></path></svg>
+                        Revolut
+                    </span>
+                </div>
+                <div class="border-t border-gray-200 pt-4">
+                    <label classs="text-sm font-medium text-gray-700">Card Number</label>
+                    <div class="w-full bg-white border border-gray-300 rounded-md p-2 text-gray-900">**** **** **** 1234</div>
+                </div>
+                <div class="flex space-x-4">
+                    <div class="w-1/2">
+                        <label classs="text-sm font-medium text-gray-700">Expiry Date</label>
+                        <div class="w-full bg-white border border-gray-300 rounded-md p-2 text-gray-900">12 / 28</div>
+                    </div>
+                    <div class="w-1/2">
+                        <label classs="text-sm font-medium text-gray-700">CVC</label>
+                        <div class="w-full bg-white border border-gray-300 rounded-md p-2 text-gray-900">***</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col space-y-3 mt-6">
+                <button id="confirmPaymentButton" class="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-lg hover:bg-blue-700 transition duration-200">
+                    Confirm Payment
+                </button>
+                <button id="cancelPaymentButton" class="w-full bg-gray-200 text-gray-700 font-semibold py-2 px-6 rounded-lg hover:bg-gray-300 transition duration-200">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- NEW: Processing Transaction Modal -->
+    <div id="processingPaymentModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full">
+            <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-6" style="animation: spin 1s linear infinite;"></div>
+            <p class="text-xl font-semibold text-gray-800 text-center">Processing transaction...</p>
+        </div>
+    </div>
+
+    <!-- Fake Transaction Message -->
+    <div id="paymentSuccess" class="hidden fixed z-50 top-10 left-1/2 -translate-x-1/2 bg-green-500 text-white py-3 px-6 rounded-lg shadow-xl">
+        Transaction Successful! Your Premium access is active.
+    </div>
+
+    <!-- Queue Modal (for non-premium) -->
+    <div id="queueModal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full">
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-4">You are in the queue</h2>
+            <p class="text-gray-600 text-center mb-6">Due to high demand, free users are placed in a queue. Premium users skip this step.</p>
+            <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-6" style="animation: spin 1s linear infinite;"></div>
+            <div class="text-center">
+                <p class="text-lg text-gray-700">Users ahead of you:</p>
+                <span id="queuePosition" class="text-4xl font-bold text-blue-600">5,324</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loader Desktop Container - Will hold the pop-up windows -->
+    <div id="loaderDesktop" class="absolute inset-0 w-full h-full overflow-hidden">
+        <!-- JavaScript will insert loader windows here -->
+    </div>
+
+    <!-- Game Container (initially hidden) -->
+    <div class="w-full max-w-2xl mx-auto hidden" id="gameContainer">
+        <!-- Header replicating the Chrome error message -->
+        <div class="flex items-center space-x-3 mb-8">
+            <!-- Simple SVG icon for the "sad tab" -->
+            <svg class="w-12 h-12 text-gray-400" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" stroke="currentColor">
+                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div>
+                <h1 class="text-2xl font-semibold text-gray-800">No internet</h1>
+                <p class="text-gray-500">Try:
+                    <ul class="list-disc list-inside ml-1">
+                        <li>Checking the network cables, modem, and router</li>
+                        <li>Reconnecting to Wi-Fi</li>
+                    </ul>
+                </p>
+                <p class="text-xs text-gray-400 mt-1">ERR_INTERNET_DISCONNECTED</p>
+            </div>
+        </div>
+
+        <!-- Game Canvas Container -->
+        <div class="relative w-full overflow-hidden">
+            <canvas id="gameCanvas" class="w-full bg-gray-50 border-b-2 border-gray-300"></canvas>
+            <!-- Score Display -->
+            <div id="score" class="absolute top-2 right-2 text-lg font-mono text-gray-500">HI 00000 00000</div>
+            <!-- Game Over Message -->
+            <div id="gameOver" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 hidden">
+                <div class="text-2xl font-bold">G A M E   O V E R</div>
+                <!-- Simple SVG for restart button -->
+                <svg class="w-12 h-12 mt-4" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewBox="0 0 24 24" stroke="currentColor">
+                    <path d="M15 15l-6 6m0-6l6 6M9 9V5a3 3 0 013-3v0a3 3 0 013 3v4m-6 0h6m-6 0H6a3 3 0 00-3 3v0a3 3 0 003 3h3"></path>
+                    <path d="M9 15v4a3 3 0 003 3v0a3 3 0 003-3v-4"></path>
+                </svg>
+            </div>
+        </div>
+        <p class="text-center text-gray-400 text-sm mt-4">Press Space or Tap to Start</p>
+    </div>
+
+    <script>
+        // Get canvas and context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        // ... (All game code is unchanged) ...
+        // ... (Dino, Cactus, gameLoop, etc.) ...
+        
+        // --- Game constants ---
+        const DINO_WIDTH = 20; // Base width
+        // ... (rest of game constants)
+        // DOM Elements
+        const scoreEl = document.getElementById('score');
+        const gameOverEl = document.getElementById('gameOver');
+
+        // Set canvas dimensions
+        canvas.width = 600;
+        canvas.height = 150;
+        
+        const GROUND_Y = canvas.height - 30 - 10;
+        const GRAVITY = 0.6;
+        const JUMP_FORCE = -10;
+        const GAME_SPEED_START = 4;
+        const GAME_SPEED_INCREMENT = 0.001;
+
+        // --- Game variables ---
+        let dinoY = GROUND_Y;
+        // ... (rest of game variables)
+        let dinoVelocityY = 0;
+        let isJumping = false;
+        let obstacles = [];
+        let score = 0;
+        let highScore = 0;
+        let gameSpeed = GAME_SPEED_START;
+        let frameCount = 0;
+        let nextObstacleFrame;
+        let gameStarted = false;
+        let gameOver = false;
+
+        // --- Dino Class ---
+        class Dino {
+            constructor() {
+                this.x = 20;
+                this.y = GROUND_Y;
+                this.w = DINO_WIDTH; // Base width
+                this.h = 30; // Base height
+                this.velocityY = 0;
+                this.isJumping = false;
+            }
+            // ... (Dino draw, jump, update, getRect methods - all unchanged) ...
+            draw() {
+                ctx.fillStyle = '#555'; // Dino color
+                ctx.fillRect(this.x + 10, this.y, 15, 10); // Head
+                ctx.fillRect(this.x + 25, this.y + 5, 5, 5); // Snout
+                ctx.fillRect(this.x, this.y + 10, 20, 15); // Body
+                ctx.fillRect(this.x - 10, this.y + 10, 10, 5); // Tail
+                if (this.isJumping) {
+                    ctx.fillRect(this.x + 2, this.y + 25, 5, 5);
+                    ctx.fillRect(this.x + 12, this.y + 25, 5, 5);
+                } else {
+                    const legFrame = (gameStarted) ? Math.floor(frameCount / 6) % 2 : 0;
+                    if (legFrame === 0) {
+                        ctx.fillRect(this.x + 2, this.y + 25, 5, 10);
+                        ctx.fillRect(this.x + 12, this.y + 25, 5, 5);
+                    } else {
+                        ctx.fillRect(this.x + 2, this.y + 25, 5, 5);
+                        ctx.fillRect(this.x + 12, this.y + 25, 5, 10);
+                    }
+                }
+            }
+            jump() {
+                if (!this.isJumping && this.y === GROUND_Y) {
+                    this.velocityY = JUMP_FORCE;
+                    this.isJumping = true;
+                }
+            }
+            update() {
+                this.y += this.velocityY;
+                this.velocityY += GRAVITY;
+                if (this.y > GROUND_Y) {
+                    this.y = GROUND_Y;
+                    this.velocityY = 0;
+                    this.isJumping = false;
+                }
+            }
+            getRect() {
+                return { x: this.x - 10, y: this.y, width: 40, height: this.h + 5 };
+            }
+        }
+
+        // --- Obstacle Class ---
+        class Cactus {
+            constructor() {
+                this.w = 10 + Math.random() * 20;
+                this.h = 20 + Math.random() * 30;
+                this.x = canvas.width;
+                this.y = GROUND_Y + 30 - this.h;
+            }
+            // ... (Cactus draw, update, getRect methods - all unchanged) ...
+            draw() {
+                ctx.fillStyle = '#555';
+                ctx.fillRect(this.x, this.y, this.w, this.h);
+                ctx.fillRect(this.x + (this.w / 2) - 2.5, this.y - 10, 5, 10);
+            }
+            update() { this.x -= gameSpeed; }
+            getRect() {
+                return [
+                   { x: this.x, y: this.y, width: this.w, height: this.h },
+                   { x: this.x + (this.w / 2) - 2.5, y: this.y - 10, width: 5, height: 10 }
+                ];
+            }
+        }
+
+        // --- Game Functions ---
+        let dino = new Dino();
+        // ... (spawnObstacle, updateScore, checkCollision, restartGame, handleStartOrJump - all unchanged) ...
+        function spawnObstacle() {
+            nextObstacleFrame = frameCount + Math.floor(60 + Math.random() * 100);
+            obstacles.push(new Cactus());
+        }
+        function updateScore() {
+            score++;
+            if (score > highScore) highScore = score;
+            const formattedScore = String(score).padStart(5, '0');
+            const formattedHighScore = String(highScore).padStart(5, '0');
+            scoreEl.textContent = `HI ${formattedHighScore} ${formattedScore}`;
+        }
+        function checkCollision(dinoRect, cactusRects) {
+            for (const rect of cactusRects) {
+                const collided = (
+                    dinoRect.x < rect.x + rect.width &&
+                    dinoRect.x + dinoRect.width > rect.x &&
+                    dinoRect.y < rect.y + rect.height &&
+                    dinoRect.y + dinoRect.height > rect.y
+                );
+                if (collided) return true;
+            }
+            return false;
+        }
+        function restartGame() {
+            dino = new Dino();
+            obstacles = [];
+            score = 0;
+            gameSpeed = GAME_SPEED_START;
+            frameCount = 0;
+            gameStarted = true;
+            gameOver = false;
+            gameOverEl.classList.add('hidden');
+            nextObstacleFrame = 100;
+            gameLoop();
+        }
+        function handleStartOrJump() {
+            if (gameOver) {
+                restartGame();
+            } else {
+                if (!gameStarted) {
+                    gameStarted = true;
+                    nextObstacleFrame = 100;
+                    gameLoop();
+                }
+                dino.jump();
+            }
+        }
+
+        // --- Main Game Loop ---
+        function gameLoop() {
+            // ... (gameLoop logic - all unchanged) ...
+            if (gameOver) return;
+            requestAnimationFrame(gameLoop);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            frameCount++;
+            if (gameStarted) {
+                gameSpeed += GAME_SPEED_INCREMENT;
+            }
+            dino.update();
+            if (gameStarted && frameCount > nextObstacleFrame) {
+                spawnObstacle();
+            }
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update();
+                if (checkCollision(dino.getRect(), obstacles[i].getRect())) {
+                    gameOver = true;
+                    gameOverEl.classList.remove('hidden');
+                    return;
+                }
+                if (obstacles[i].x + obstacles[i].w < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+            if(gameStarted) {
+                updateScore();
+            }
+            dino.draw();
+            for (const obstacle of obstacles) {
+                obstacle.draw();
+            }
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('keydown', (e) => {
+            // ... (key listener unchanged) ...
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                e.preventDefault();
+                handleStartOrJump();
+            }
+        });
+        canvas.addEventListener('touchstart', (e) => {
+            // ... (touch listener unchanged) ...
+            e.preventDefault();
+            handleStartOrJump();
+        });
+        canvas.addEventListener('mousedown', (e) => {
+            // ... (mouse listener unchanged) ...
+            e.preventDefault();
+            handleStartOrJump();
+        });
+
+
+        // --- NEW LOADER SCRIPT ---
+        
+        // Loader constants
+        const PREMIUM_LOAD_TIME = 15 * 1000; // 15 seconds
+        const DEFAULT_LOAD_TIME = 45 * 1000; // 45 seconds
+        const NUM_STEPS = 20; // 20 steps
+        // Total time: Premium = 15s * 20 = 300s = 5 mins
+        // Total time: Default = 45s * 20 = 900s = 15 mins
+
+        let isPremium = false;
+        let currentLoadTime = DEFAULT_LOAD_TIME;
+
+        // Loader DOM elements
+        const premiumModal = document.getElementById('premiumModal');
+        const upgradeButton = document.getElementById('upgradeButton');
+        const closeModalButton = document.getElementById('closeModalButton');
+        const paymentModal = document.getElementById('paymentModal');
+        const confirmPaymentButton = document.getElementById('confirmPaymentButton');
+        const cancelPaymentButton = document.getElementById('cancelPaymentButton');
+        const processingPaymentModal = document.getElementById('processingPaymentModal');
+        const paymentSuccessMsg = document.getElementById('paymentSuccess');
+        const queueModal = document.getElementById('queueModal');
+        const queuePosition = document.getElementById('queuePosition');
+        const loaderDesktop = document.getElementById('loaderDesktop');
+        const gameContainer = document.getElementById('gameContainer');
+
+        // Define the 20 loading steps
+        // Types: 'spinner', 'dots', 'pulseGrid', 'check', 'fill' (bar, cup, battery), 'grow' (tree), 'textScroll', 'fileTransfer', 'mapRoute', 'analyzing'
+        const loaderSteps = [
+            { title: "Connecting...", desc: "Establishing secure connection...", type: "spinner" },
+            { title: "Verifying...", desc: "Checking credentials...", type: "dots" },
+            { title: "Loading (1/8)", desc: "Fetching core modules...", type: "fill", icon: "cup" },
+            { title: "Initializing...", desc: "Setting up environment...", type: "pulseGrid" },
+            { title: "Loading (2/8)", desc: "Unpacking assets...", type: "fill", icon: "battery" },
+            { title: "Building (1/3)", desc: "Cultivating pixels...", type: "grow", item: "tree", max: 5 },
+            { title: "Transferring...", desc: "Moving local files...", type: "fileTransfer" },
+            { title: "Loading (3/8)", desc: "Downloading dependencies...", type: "fill", icon: "bar" },
+            { title: "Processing...", desc: "Compiling shaders...", type: "spinner" },
+            { title: "Loading (4/8)", desc: "Reading from cache...", type: "dots" },
+            { title: "Plotting...", desc: "Calculating route...", type: "mapRoute" },
+            { title: "Building (2/3)", desc: "Sprouting branches...", type: "grow", item: "tree", max: 10 },
+            { title: "Loading (5/8)", desc: "Calibrating...", type: "fill", icon: "cup" },
+            { title: "Syncing (1/2)", desc: "Contacting servers...", type: "pulseGrid" },
+            { title: "Analyzing...", desc: "Scanning for changes...", type: "analyzing" },
+            { title: "Loading (6/8)", desc: "Bootstrapping...", type: "fill", icon: "battery" },
+            { title: "Executing...", desc: "Running initial scripts...", type: "textScroll" },
+            { title: "Processing...", desc: "Optimizing...", type: "spinner" },
+            { title: "Loading (7/8)", desc: "Finalizing assets...", type: "fill", icon: "bar" },
+            { title: "Building (3/3)", desc: "Planting forest...", type: "grow", item: "tree", max: 15 },
+            { title: "Syncing (2/2)", desc: "Receiving handshake...", type: "dots" },
+            { title: "Loading (8/8)", desc: "Preparing UI...", type: "fill", icon: "cup" },
+            { title: "Cleaning Up...", desc: "Almost ready...", type: "pulseGrid" },
+            { title: "Done!", desc: "Launching application...", type: "check" }
+        ].slice(0, NUM_STEPS); // Ensure we only have NUM_STEPS
+
+        // SVG Icons and templates
+        const svgIcons = {
+            cup: `<svg class="w-20 h-20" viewBox="0 0 100 100"><path d="M10 90 H90 V70 Q90 50, 75 50 H25 Q10 50, 10 70 V90" fill="#eee" stroke="#555" stroke-width="2"/><rect class="loader-progress" x="12" y="88" width="76" height="0" fill="#3b82f6" style="transition: all 0.2s ease-out;"/></svg>`,
+            battery: `<svg class="w-24 h-12" viewBox="0 0 100 50"><rect x="0" y="0" width="90" height="50" rx="5" ry="5" fill="none" stroke="#555" stroke-width="2"/><rect x="90" y="15" width="5" height="20" rx="2" ry="2" fill="#555"/><rect class="loader-progress" x="5" y="5" width="0" height="40" fill="#3b82f6" style="transition: width 0.2s ease-out;"/></svg>`,
+            bar: `<div class="w-full h-4 bg-gray-200 rounded-full overflow-hidden"><div class="loader-progress bg-blue-500 h-full rounded-full" style="width: 0%; transition: width 0.2s ease-out;"></div></div>`,
+            tree: `<svg class="w-8 h-8 inline-block" viewBox="0 0 100 100"><polygon points="50,10 80,70 20,70" fill="#2a5"/><rect x="40" y="70" width="20" height="20" fill="#532"/></svg>`,
+            fileTransfer: `<div class="relative w-24 h-12">
+                <svg class="w-10 h-10 absolute left-0" fill="#fbb03b" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path></svg>
+                <svg class="w-8 h-8 absolute left-1 top-2" fill="#fff" style="animation: file-move 1s infinite alternate ease-in-out;" viewBox="0 0 20 20"><path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm0 2h12v10H4V5z"></path></svg>
+                <svg class="w-10 h-10 absolute right-0" fill="#999" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path></svg>
+            </div>`,
+            mapRoute: `<svg class="w-24 h-16" viewBox="0 0 100 60">
+                <path d="M10 50 Q 20 10, 50 30 T 90 20" stroke="#999" stroke-width="4" fill="none" stroke-dasharray="100"/>
+                <path d="M10 50 Q 20 10, 50 30 T 90 20" stroke="#3b82f6" stroke-width="4" fill="none" stroke-dasharray="100" stroke-dashoffset="100" style="animation: draw-route 2s infinite linear;"/>
+            </svg>`,
+            analyzing: `<div class="relative w-20 h-20">
+                <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <svg class="w-10 h-10 absolute top-0 left-0 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <div class="w-10 h-10 absolute top-0 left-0 border-2 border-blue-400 rounded-full animate-pulse" style="animation-duration: 1.5s;"></div>
+            </div>`
+        };
+
+        // --- Modal Logic ---
+        upgradeButton.addEventListener('click', () => {
+            // Show the payment modal instead of starting
+            premiumModal.classList.add('hidden');
+            paymentModal.classList.remove('hidden');
+        });
+
+        cancelPaymentButton.addEventListener('click', () => {
+            // Go back to the premium offer
+            paymentModal.classList.add('hidden');
+            premiumModal.classList.remove('hidden');
+        });
+
+        confirmPaymentButton.addEventListener('click', () => {
+            paymentModal.classList.add('hidden');
+            processingPaymentModal.classList.remove('hidden');
+
+            // Wait 3 seconds for "processing"
+            setTimeout(() => {
+                processingPaymentModal.classList.add('hidden');
+                
+                // Show success message
+                paymentSuccessMsg.classList.remove('hidden');
+                setTimeout(() => {
+                    paymentSuccessMsg.classList.add('hidden');
+                }, 2500);
+
+                // Set premium settings and start loader
+                isPremium = true;
+                currentLoadTime = PREMIUM_LOAD_TIME;
+                runLoaderStep(0);
+
+            }, 3000); // 3-second processing time
+        });
+
+        closeModalButton.addEventListener('click', () => {
+            isPremium = false;
+            currentLoadTime = DEFAULT_LOAD_TIME;
+            premiumModal.classList.add('hidden');
+            // Start the queue instead of the loader
+            startQueue();
+        });
+
+        let currentIntervalId = null; // To hold the interval ID for each step
+
+        function startQueue() {
+            queueModal.classList.remove('hidden');
+            
+            const queueDuration = 5 * 60 * 1000; // 5 minutes
+            // const queueDuration = 5 * 1000; // 5 seconds for testing
+            const startUsers = 5324;
+            const startTime = Date.now();
+
+            queuePosition.textContent = startUsers;
+
+            const queueInterval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                let progress = elapsed / queueDuration;
+
+                if (progress >= 1) {
+                    progress = 1;
+                    clearInterval(queueInterval);
+                    queueModal.classList.add('hidden');
+                    runLoaderStep(0); // Start the 15-minute loader
+                }
+
+                const currentPosition = Math.floor(startUsers * (1 - progress));
+                queuePosition.textContent = currentPosition;
+
+            }, 100); // Update 10 times a second
+        }
+
+        function runLoaderStep(step) {
+            // Clear any existing timer from the previous step
+            if (currentIntervalId) {
+                clearInterval(currentIntervalId);
+                currentIntervalId = null;
+            }
+
+            if (step >= NUM_STEPS) {
+                // Loading finished
+                setTimeout(() => {
+                    loaderDesktop.classList.add('hidden');
+                    gameContainer.classList.remove('hidden');
+                    // Initial Draw (Show dino before start)
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    dino.draw();
+                }, 1000); // Short delay after final "Done!"
+                return;
+            }
+
+            const config = loaderSteps[step];
+            let animationHtml = '';
+            
+            // Build animation HTML based on type
+            switch (config.type) {
+                case "spinner": animationHtml = `<div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto" style="animation: spin 1s linear infinite;"></div>`; break;
+                case "dots": animationHtml = `<div class="flex justify-center space-x-2 loader-dots"><div class="w-3 h-3 bg-blue-500 rounded-full"></div><div class="w-3 h-3 bg-blue-500 rounded-full"></div><div class="w-3 h-3 bg-blue-500 rounded-full"></div></div>`; break;
+                case "pulseGrid": animationHtml = `<div class="grid grid-cols-3 gap-1 w-12 h-12 mx-auto">${Array(9).fill(0).map((_, i) => `<div class="w-3 h-3 bg-blue-500 rounded animate-pulse" style="animation-delay: ${ (i * 0.1).toFixed(1) }s;"></div>`).join('')}</div>`; break;
+                case "check": animationHtml = `<svg class="w-16 h-16 mx-auto text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`; break;
+                case "textScroll": animationHtml = `<div class="text-scroll-box w-full"><p>&gt; Executing boot.ini... [OK]</p><p>&gt; Loading user_prefs.dat... [OK]</p><p>&gt; Initializing render thread... <div>.</div></p></div>`; break;
+                case "fill": animationHtml = svgIcons[config.icon]; break;
+                case "grow": animationHtml = `<div class="grow-container w-full h-24 p-2 bg-gray-100 rounded-lg overflow-y-auto"></div>`; break;
+                default: animationHtml = svgIcons[config.type] || ''; break;
+            }
+            
+            // Create new window element
+            const windowEl = document.createElement('div');
+            windowEl.className = 'loader-window w-64 rounded-lg bg-white overflow-hidden absolute';
+            // Random position, avoiding edges
+            windowEl.style.left = `${Math.random() * 60 + 5}%`; // 5% to 65%
+            windowEl.style.top = `${Math.random() * 50 + 5}%`; // 5% to 55%
+            
+            const stepIndicator = isPremium ? `<span class="text-sm font-normal text-gray-400">(${step + 1}/${NUM_STEPS})</span>` : '';
+
+            // Set the window content
+            windowEl.innerHTML = `
+                <div class="loader-window-titlebar bg-gray-200 px-3 py-1 text-sm font-bold text-gray-700 flex justify-between items-center">
+                    <span class="title-text">${config.title} ${stepIndicator}</span>
+                    <span class="w-3 h-3 bg-red-400 rounded-full border border-red-500"></span>
+                </div>
+                <div class="p-4 space-y-3">
+                    <div class="flex justify-center items-center min-h-[80px]">${animationHtml}</div>
+                    <p class="text-sm text-gray-500 text-center">${config.desc}</p>
+                </div>
+            `;
+            
+            loaderDesktop.appendChild(windowEl);
+            
+            // --- Setup progress animation for this step ---
+            let progress = 0;
+            const updateInterval = 100; // ms
+            const totalUpdates = currentLoadTime / updateInterval;
+            const progressIncrement = 100 / totalUpdates;
+            
+            const progressEl = windowEl.querySelector('.loader-progress');
+            
+            if (config.type === "fill") {
+                if (config.icon === "cup") {
+                    currentIntervalId = setInterval(() => {
+                        progress += progressIncrement; if (progress > 100) progress = 100;
+                        const fillHeight = 70 * (progress / 100);
+                        if(progressEl) {
+                            progressEl.style.height = `${fillHeight}px`;
+                            progressEl.setAttribute('y', 88 - fillHeight);
+                        }
+                        if (progress >= 100) clearInterval(currentIntervalId);
+                    }, updateInterval);
+                } else if (config.icon === "battery") {
+                    currentIntervalId = setInterval(() => {
+                        progress += progressIncrement; if (progress > 100) progress = 100;
+                        const fillWidth = 80 * (progress / 100);
+                        if(progressEl) progressEl.style.width = `${fillWidth}px`;
+                        if (progress >= 100) clearInterval(currentIntervalId);
+                    }, updateInterval);
+                } else if (config.icon === "bar") {
+                    currentIntervalId = setInterval(() => {
+                        progress += progressIncrement; if (progress > 100) progress = 100;
+                        if(progressEl) progressEl.style.width = `${progress}%`;
+                        if (progress >= 100) clearInterval(currentIntervalId);
+                    }, updateInterval);
+                }
+            } else if (config.type === "grow") {
+                const growContainer = windowEl.querySelector('.grow-container');
+                const itemsToGrow = config.max;
+                const growInterval = currentLoadTime / itemsToGrow;
+                let itemsGrown = 0;
+                currentIntervalId = setInterval(() => {
+                    if(growContainer) {
+                        growContainer.innerHTML += svgIcons[config.item];
+                        growContainer.scrollTop = growContainer.scrollHeight;
+                    }
+                    itemsGrown++;
+                    if (itemsGrown >= itemsToGrow) clearInterval(currentIntervalId);
+                }, growInterval);
+            }
+            
+            // --- Move to next step ---
+            setTimeout(() => {
+                // Mark as "Done"
+                const titleText = windowEl.querySelector('.title-text');
+                if(titleText) {
+                    titleText.innerHTML = `${config.title} <span class="text-green-500 font-bold">✔ Done</span>`;
+                }
+                // Stop any lingering animations
+                windowEl.querySelector('.flex').innerHTML = `<svg class="w-16 h-16 mx-auto text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+                
+                // Run next step
+                runLoaderStep(step + 1);
+            }, currentLoadTime);
+        }
+
+        // Start the loading sequence on window load
+        window.onload = () => {
+            // Show the modal instead of starting the loader
+            premiumModal.classList.remove('hidden');
+            // gameContainer.classList.remove('hidden'); // For testing game
+            // dino.draw(); // For testing game
+        };
+        
+        // --- END OF LOADER SCRIPT ---
+
+    </script>
+</body>
+</html>
